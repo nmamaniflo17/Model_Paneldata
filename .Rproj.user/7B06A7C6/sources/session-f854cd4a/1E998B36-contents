@@ -1,0 +1,580 @@
+---
+title: Efectos de las Leyes Obligatorias del Uso del Cinturón de Seguridad en el Comportamiento
+  de Conducción y las Muertes por Accidentes de Tránsito
+author: "Nelson Brayan Mamani Flores"
+date: "27 de febrero, 2023"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    toc_float: yes
+    smooth_scroll: yes
+    theme: journal
+    highlight: kate
+    df_print: paged
+    code_folding: show
+---
+
+
+# Introducción
+
+&nbsp; Los accidentes de tráfico son la principal causa de muerte de los estadounidenses entre los 5 y los 32 años de edad. Es por ello que, mediante distintas políticas de gasto, el gobierno federal ha alentado a los estados a instituir normativas de obligatoriedad de uso del cinturón de seguridad para reducir el número de muertes y lesiones graves. En ese sentido, este trabajo investigará la eficacia de las leyes en el aumento del uso del cinturón de seguridad y la reducción de víctimas mortales. Cabe resaltar que los datos recogidos contienen un panel equilibrado de datos anuales sobre 50 estados de EE.UU. (más el distrito de Columbia) para el periodo 1983-1997.
+
+# Desarrollo
+
+&nbsp; Claramente, el uso de los cinturones de seguridad en las carreteras ha demostrado ser una medida eficaz para reducir la cantidad de muertes y lesiones graves en los accidentes de tránsito. De hecho, según la World Health Organization (WHO, 2014), el uso del cinturón de seguridad reduce el riesgo de muerte en un 45% y el riesgo de lesiones graves en un 50%.
+
+&nbsp; Asimismo, varios estudios han demostrado que la falta de uso del cinturón de seguridad está relacionada con una mayor tasa de lesiones graves y muertes en accidentes de tránsito. En consideración a ello, Perez-Nuñez et.al (2014), en su estudio, "El estado de las lesiones causadas por el tránsito en México: evidencias para fortalecer la estrategia mexicana de seguridad vial", demostró que los pasajeros que no usaban cinturones de seguridad en el momento de la colisión presentaban una mayor tasa de lesionabilidad.
+
+## Análisis de Datos
+&nbsp; Al iniciar un script en R, es común llamar todas las librerías necesarias al principio del script mediante la función library(). La razón principal de esto es asegurarse de que todas las funciones y objetos definidos en esas librerías estén disponibles para su uso en el resto del script. 
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)  
+library(lmtest)     
+library(plm)       
+library(modeest)     
+library(data.table) 
+library(dplyr)      
+library(stargazer)
+library(tinytex)
+```
+
+### Definición de la base
+
+&nbsp; Los datos para el analisis provienen de la investigación realizada por el profesor Liran Einav de la Universidad de Stanford en su arituculo: "The Effects of Mandatory Seat Belt Laws on Driving Behavior and Traffic Fatalities," The Review of Economics and Statistics, 2003, Vol. 85, pp 828-843. (Eynav & Cohen, 2003)
+
+El fichero de datos contiene las siguientes variables:
+
+-   name: nombre del estado, incluyendo el distrito de Columbia.
+-   fips: código estatal federal de procesamiento de información.
+-   fatalityrate: número de muertes por millón de millas conducidas.
+-   sb_usage: proporción de uso del cinturón de seguridad.
+-   vmt: millones de millas de tráfico por año.
+-   speed65: 1 si en el estado hay un límite de velocidad de 65 millas por hora, 0 en otro caso.
+-   speed70: 1 si en el estado hay un límite de velocidad de 70 millas por hora o superior, 0 en otro caso.
+-   ba08: 1 si en el estado hay un límite de alcohol en sangre menor o igual al 0,08%, 0 en otro caso.
+-   drinkage21: 1 si en el estado hay una prohibición de beber alcohol a menores de 21 años, 0 en otro caso.
+-   income: renta per cápita en el estado;
+-   age: edad media en el estado.
+-   primary: 1 si en el estado la ley de obligatoriedad de uso del cinturón de seguridad se aplica de forma básica, 0 en otro caso.
+-   secondary: 1 si en el estado la ley de obligatoriedad de uso del cinturón de seguridad se aplica de forma secundaria, 0 en otro caso.
+
+&nbsp; Ahora bien, como parte del analisis de datos, realizamos la importación de nuestra data en R. Para ello utilizamos los siguientes comandos.
+
+```{r message=FALSE, warning=FALSE, results='asis'}
+S6_cinturon <- read.csv("C:/Users/Nelson/Documentos/Projects/Modelo_Panel/base/S6_cinturon.csv", sep=";")
+```
+
+&nbsp; Una vez realizada la importación de nuestros datos, estructuramos nuestra data en forma de tabla utilizando la siguiente función:
+
+```{r}
+# Tabla1
+knitr::kable(head((subset(S6_cinturon, 
+                          select = c(name,year,fatalityrate,sb_useage,
+                                     drinkage21,income,age,
+                                     speed65,speed70))),20))
+```
+
+&nbsp; A continuación, realizamos la descripción basica de los datos de nuestras variables no categóricas. Los resultados son los siguientes:
+
+```{r, results='asis'}
+# Tabla 2
+resumen_std <- summary(subset(S6_cinturon,
+                              select = c(fatalityrate,sb_useage,
+                                         income,l_income,vmt)))
+knitr::kable(resumen_std)  
+```
+
+&nbsp; Como se observa en los resultados, con respecto a la variable "sb_usage", se cumple que la media en proporción de uso de cinturon de seguridad por estado es del 52.89%. Asimimo, la variable "fatalityrate", indica que número de muertes por millón de millas conducidas es de 0.0215.
+
+&nbsp; Ahora bien para realizar un analisis más eficiente, seleccionamos las variables pertinentes para nuestro modelo y le damos el formato de panel de datos.
+
+```{r}
+# Selección de  variables de interes y especificación de data panel 
+S6_cinturon2 <- S6_cinturon %>% 
+  select(name, year, fatalityrate, sb_useage, speed65,
+         speed70, ba08, drinkage21, l_income, age, primary, secondary)
+
+S6_cinturon_pl <- pdata.frame(S6_cinturon2,
+                               index=c("name","year"))
+```
+
+### Visualización inicial
+
+&nbsp; A continuación realizamos los graficos de tendencia para cada variable pertinente en nuestro modelo. Los resultados nos mostraran la evolución de una determinada variable a lo largo de los años. En este caso, en la figura 2, se presenta a la variable de accidentes fatales por millon de millas conducidas para cada estado (fatalityrate).
+
+```{r}
+# Gráfico 1
+S6_cinturon_pl %>% 
+  ggplot(aes(x=year, y=fatalityrate, color=name,
+      group=name))+
+  geom_line()+
+  labs(title ="Número de muertes por millon de millas conducidas 1983 - 1987",
+       subtitle = "Cifras anuales por estado", x="Años",
+       y="Tasa de mortalidad")+
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white"),
+        panel.background = element_rect(fill = "white"))+
+  theme(legend.position = "none")
+
+```
+
+&nbsp; Tal como se puede observar existe una disminución en la tendencia de la variable de muertes por millon de millas conducidas. Tal es asi que desde el año 1991 a 1997, el ratio se concentró en el intervalo de 0.01 a 0.03.
+
+&nbsp; Seguidamente, analizamos la evolución de nuestra variable "sb_usage", que corresponde a la proporcion de uso de cinturon de seguridad.
+
+```{r warning=FALSE}
+# Gráfico 2
+S6_cinturon_pl %>% 
+  ggplot(aes(x=year, y=sb_useage, color=name,
+      group=name))+
+  geom_line()+
+  labs(title ="Proporción de uso del cinturón de seguridad, 1983 - 1987",
+       subtitle = "Cifras anuales por estado", x="Años",
+       y="Proporción")+
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = "white"),
+        panel.grid.minor = element_line(color = "white"),
+        panel.background = element_rect(fill = "white"))+
+  theme(legend.position = "none")
+```
+
+&nbsp; Tal como observamos en el gráfico 3, la proporción de uso de los cinturones de seguridad en los estados a ido aumentado. Esto corresponde a un mayor control de parte de las autoridades de transporte en los estados unidos.
+
+### Descripción estadística básica
+
+&nbsp; A priori, los datos mostrados en la tabla 3 nos indican que Massachusetts es el estado con una menor tasa de fatalidad, correspondiente al 1.3% por millón de millas conducidas. Asimismo, el estado Mississippi es el que cuenta con una mayor tasa de fatalidad, la cual es un 3.2% por millón de millas conducidas.
+
+```{r results='asis'}
+# Tabla 3
+sum <- S6_cinturon_pl %>%
+  group_by(name) %>%
+  summarize(Promedio = mean(fatalityrate), 
+            Desv_std=sd(fatalityrate),
+            Mediana=median(fatalityrate),
+            Minimo=min(fatalityrate),
+            Maximo=max(fatalityrate))
+knitr::kable(sum)
+```
+
+&nbsp; Por otro lado, con respecto a la variable "sb_useage", que corresponde a la proporción de uso del cinturon de seguridad, podemos notar en la tabla 4 que los estados que anteriormente tenian una mayor tasa de fatalidad, ahora muestran una menor proporción de uso de cinturon, a excepcion de Massachussets. Es asi que, tenemos indicios de una relación directa entre ambas variables, las cuales seran de gran ayuda para explicar nuestro modelo.
+
+```{r warning=FALSE, message=FALSE ,results='asis'}
+# Tabla 4
+sum2 <- S6_cinturon_pl %>%
+  group_by(name) %>% 
+  na.omit() %>%
+  summarise(Promedio = mean(sb_useage),
+            Desv_std=sd(sb_useage),
+            Mediana=median(sb_useage),
+            Minimo=min(sb_useage),
+            Maximo=max(sb_useage))
+knitr::kable(sum2)
+```
+
+&nbsp; Ahora bien, para un mejor analisis los nuestros datos obtenidos, ilustraremos nuestros resultados de manera gráfico tomando en cuenta nuestras 2 variables determinantes. Es asi que, generaramos una variable que sea el promedio por estado del ratio de fatalidad por millas conducidas de la siguiente manera.
+
+```{r}
+# Generamos el promedio de la variable fatalityrate por estado ----
+S6_cinturon_pl <- S6_cinturon_pl %>%
+  group_by(name) %>%
+  mutate(fatalidad_prom = mean(fatalityrate))
+```
+
+&nbsp; Seguidamente, generamos el gráfico correspondiente al promedio de ratio de fatalidad por millas conducidas por cada estado.
+
+```{r message=FALSE, warning=FALSE, results='hide', fig.height=7, fig.width=6}
+#Grafico 3
+ggplot(S6_cinturon_pl, aes(x=fatalidad_prom, y=(reorder(name, fatalidad_prom)), color=name)) +
+  geom_point(size=3.5) +
+  labs(title ="Muertes promedio por millas conducidas 1983 - 1987 ",
+       subtitle = "Cifras anuales por estado", x="Promedio por estado",
+       y="Estados") +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(colour="grey60",
+                                          linetype="blank")) +
+  theme(legend.position = "None")
+```
+
+&nbsp; Tal como se puede observar en el gráfico 1, el estado de de Massachusetts presente el menor ratio de fatalidad por millon de millas conducidas correspondiente a menos 0.015. En cambio, el estado de Mississippi presente una mayor tasa de fatalidad promedio (0.03223) mayor a todos los estados.
+
+&nbsp; A continuación, realizamos el mismo proceso para nuestra variable de proporción de uso de cinturón de seguridad.
+
+```{r}
+# Generamos el promedio de la variable fatalityrate por estado ----
+S6_cinturon_pl <- S6_cinturon_pl %>%
+  group_by(name) %>%
+  na.omit() %>% 
+  mutate(cinturon_prom = mean(sb_useage))
+```
+
+```{r message=FALSE, warning=FALSE, results='hide', fig.height=7, fig.width=6}
+#Grafico 4
+ggplot(S6_cinturon_pl, aes(x=cinturon_prom, y=(reorder(name, cinturon_prom)), color=name)) +
+  geom_point(size=3.5) +
+  labs(title ="Proporción de uso de cinturón de seguridad, 1983 - 1987 ",
+       subtitle = "Cifras anuales por estado", x="Promedio por estado",
+       y="Estados") +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(colour="grey60",
+                                          linetype="blank")) +
+  theme(legend.position = "None")
+```
+
+&nbsp; Los gráficos mostrados nos muestran una posible relación entre el ratio de fatalidad por millon de millas conducidas y la proporción de uso de cinturón de seguridad. Es uno de los resultados a priori que podemos concluir. Sin embargo, tenemos que tomar en cuenta nuestras demás variables y ver la significatividad de nuestro modelo para una conclusión más acertada, y libre de sesgo.
+
+### Análisis estadístico de la serie
+
+&nbsp; En principio, realizaremos el análisis estadístico planteando un modelo de regresión panel con efectos fijos, básicamente porque una regresión de efectos fijos permite tener en cuenta variables omitidas que varían entre las entidades individuales pero que no cambian en el tiempo, que en nuestro caso podría ser la cultura de la bebida o cultura del alcohol en cada estado.
+
+```{r}
+# Relizamos la regresión panel con efectos fijos
+reg_panel_ef <- plm(fatalityrate ~ sb_useage + speed65 +
+                  speed70 + ba08 + drinkage21 + l_income + age,
+                  data=S6_cinturon_pl,
+                  model="within",
+                  cluster="name")
+residuos <- resid(reg_panel_ef)
+```
+
+&nbsp;Seguidamente, realizamos el gráfico Q-Q (quantile-quantile plot) de los residuos en nuestra regresión de datos panel con efectos fijos. La cual se utiliza para evaluar si los residuos siguen una distribución normal. En tal caso, si los residuos siguen una distribución normal, entonces los puntos en el gráfico Q-Q deben seguir aproximadamente una línea recta.
+
+```{r}
+# Gráfico 5
+qqnorm(residuos, col = "green", cex = 0.5, lty = "dashed",
+       main = "Gráfico de Q-Q de residuos")
+qqline(residuos, lty="dotdash")
+```
+
+&nbsp; Podemos ver en nuestro gráfico Q-Q anterior que los residuos tienden a desviarse ligeramente de la línea de 45 grados, especialmente en los extremos de la cola. Esto podría ser una indicación de que posiblmente nuestro datos no esten normalmente distribuidos, quizá por la presencia de heterocedasticidad o algunos datos atípicos. Por lo pronto, es factible que sea necesario realizar ajustes adicionales tales como, utilizar técnicas de regresión robusta para hacer frente a estos inconvenientes. En ese sentido, al realizarlos ajustes al modelo podríamos mejorar su capacidad para explicar los datos.
+
+## Planteamiento del Modelo
+
+&nbsp; En este caso, plantearemos inicialmente la estructura de nuestro modelo para su posterior sustenación téorica.
+
+$$
+\begin{aligned}
+fatalityrate_{it} =\beta_0+ \beta_{1}sb\_useage_{it} + \beta_{2}l\_income_{it} + \beta_{3}age_{it}+\\
+\gamma_{1}speed65_{it}+ \gamma_{2}speed70_{it} + \gamma_{3}ba08_{it} + \gamma_{4}drinkage_{it} + u_{it}
+\end{aligned}
+$$ 
+&nbsp; Donde:
+
+- fatalityrate: número de muertes por millón de millas conducidas.
+- sb_useage: proporción de uso del cinturón de seguridad.
+- l_income: logaritmo de la renta per cápita.
+- speed65: 1 si en el estado hay un límite de velocidad de 65 millas por hora, 0 en otro caso.
+- speed70: 1 si en el estado hay un límite de velocidad de 70 millas por hora o superior, 0 en otro caso.
+- ba08: 1 si en el estado hay un límite de alcohol en sangre menor o igual al 0,08%, 0 en otro caso.
+- drinkage21: 1 si en el estado hay una prohibición de beber alcohol a menores de 21 años, 0 en otro caso.
+
+
+### Modelo de regresión agrupada de datos panel
+
+&nbsp; En el modelo de regresión pooled, se combinan los datos de diferentes grupos o períodos en un solo conjunto de datos y se realiza un análisis de regresión en el conjunto de datos combinado. Según Hiestand(2005), el modelo de regresión agrupado es un tipo de modelo que tiene coeficientes constantes, tanto las intersecciones como a las pendientes. Básicamente, es un modelo que agrupa todas las variables en una sola regresión de tipo lineal. Este modelo se diferencia de otros modelos de regresión longitudinal, como el modelo de efectos aleatorios, en que no tiene en cuenta las diferencias entre los grupos o períodos individuales.
+
+&nbsp; Montero(2011), estima el siguiente modelo:
+
+$$
+y_{it}= \alpha_i +\beta_{1}X_{it}+...+\beta_{n}X_{it}+u_{it}
+$$
+
+&nbsp; Donde, si no se disponen de todas las variables de influencia entonces $COV(X_{it},\epsilon_{it})\neq0$ , es decir los residuos no son independientes de las observaciones; por lo tanto, el modelo estara sesgado.
+
+```{r}
+## Pooled Regression
+reg_pool <- plm(fatalityrate ~ sb_useage + speed65 +
+                  speed70 + ba08 + drinkage21 + l_income + age,
+                data=S6_cinturon_pl,
+                model = "pooling")
+```
+
+&nbsp; Para solucionar los problemas de la regresión agrupada se proponen modelos alternativos mediante el anidamiento de los datos: el de efectos fijos y el de efectos
+aleatorios.
+
+### Modelo de regresión de datos panel con efectos fijos
+
+&nbsp; De acuerdo con Stock & Watson(2012), el modelo de regresión de efectos fijos es: 
+
+$$
+Y_{it} = \beta_{1}X_{1,it} + ...+ \beta_{k}X_{k,it} + \alpha_i + u_{it}
+$$ 
+
+&nbsp; La regresión de efectos fijos es un método que permite tener en cuenta las variables omitidas en datos de panel cuando las variables omitidas varían entre las distintas entidades individuales (estados), pero no cambian en el tiempo. Asimismo, el modelo de regresión de efectos fijos presenta n interceptos diferentes, uno para cada entidad individual. Estos interceptos pueden representarse mediante un conjunto de variables binarias (o indicadores). Estas variables binarias absorben las influencias de todas las variables omitidas que difieren de una entidad individual a otra, pero son constantes en el tiempo.
+
+
+```{r}
+## Fixed Effect Regression
+reg_panel_ef <- plm(fatalityrate ~ sb_useage + speed65 +
+                  speed70 + ba08 + drinkage21 + l_income + age,
+                  model="within",
+                  data=S6_cinturon_pl)
+```
+
+
+### Modelo de regresión de datos panel con efectos Aleatorios
+
+&nbsp; Montero (2012) indica que, el modelo de efectos aleatorios tiene la misma especificación que el de efectos fijos con la salvedad de que $v_i$, en lugar de ser un valor fijo para cada individuo y constante a lo largo del tiempo para cada individuo, es una variable aleatoria con un valor medio $v_i$ y una varianza $Var(vi)\neq0$. En otras palabras, no se tiene certeza del valor exacto en el origen ($v_i$) que pueda tener cada individuo sino que pensamos que este, probablemente gravitará en torno a un valor central.
+El modelo  planteado es el siguiente:
+
+$$
+Y_{it} = \alpha + \beta_{1}X_{1,it} + ...+ \beta_{k}X_{k,it} +v_i + u_{it}
+$$
+
+```{r}
+#Ramndom Effect Regression
+reg_panel_ea <- plm(fatalityrate ~ sb_useage + speed65 + 
+                      speed70+ba08+drinkage21+l_income+age,
+                    data=S6_cinturon_pl,
+                    model="random")
+```
+
+
+### Correción de errores estándar agrupados
+
+&nbsp; Los errores a heterocedasticidad y correlación consistentes son errores estándar robustos que se utilizan en modelos de regresión para corregir los problemas de heterocedasticidad y correlación serial en los datos. Según Hanck et al.(2021), al igual que para la heteroscedasticidad, la autocorrelación invalida las fórmulas de error estándar habituales, así como los errores estándar robustos a la heteroscedasticidad, ya que estos se derivan bajo el supuesto de que no hay autocorrelación. Cuando hay tanto heteroscedasticidad como autocorrelación, es necesario utilizar los llamados errores estándar de heteroscedasticidad y autocorrelación consistented (HAC).
+
+&nbsp; Como se muestra a continuación, es bastante fácil especificar el uso de errores estándar agrupados en R. Convenientemente, vcovHC() reconoce los objetos del modelo de panel (objetos de la clase plm) y calcula los errores estándar agrupados de forma predeterminada para cada modelo de regresión.
+
+```{r}
+rob_se <- list(sqrt(diag(vcovHC(reg_pool, type = "HC1"))),
+               sqrt(diag(vcovHC(reg_panel_ef, type = "HC1"))),
+               sqrt(diag(vcovHC(reg_panel_ea, type = "HC1"))))
+```
+
+&nbsp; Luego de realizar los ajustes necesarios a nuestro modelo, presentamos las regresiones robustas en la tabla 5, a través de los siguientes comandos:
+
+```{r message=FALSE, warning=FALSE, results='hide'}
+st <- stargazer(reg_pool,reg_panel_ef,reg_panel_ea,
+          digits = 5,
+          header = FALSE,
+          type = "html", 
+          se = rob_se,
+          title = "Modelos de Regresión",
+          model.numbers = FALSE,
+          column.labels = c("Pooled", "fixed","Random"),
+          out = "tabla.html" )
+```
+
+```{r results='asis'}
+# Tabla 5
+tabla <- readLines("tabla.html")
+knitr::asis_output(tabla)
+```
+&nbsp;
+
+&nbsp; Los resultados nos muestran las 3 regresiones realizadas para cada tipo de modelo (agrupado, fijo y aleatorio). A priori, podemos observar un modelo de datos agrupados (pooled) con resultados un poco usuales al sentido común; ya que el coeficiente positivo "sb usege"(Proporcion de uso de cinturon de seguridad por estado), estadísticamente significativo al 10%, básicamente nos indica que a un mayor uso del cinturón de seguridad más muertes por accidentes de tráfico. 
+
+&nbsp; Ahora bien, con respecto a  las regresiones con efectos fijos y efectos aleatorios el resultado cambia nuestro analisis completamente ya que el efecto del uso de cinturon es negativo. Lo cual indica que a un mayor uso del cinturon de segurida menres muertes por acccidentes de tráfico. Sin embargo, en el análisis de regresión de datos panel, los modelos obtenidos se pueden derivar de varios métodos, por lo que se necesitan más pruebas para elegir el modelo correcto para predecir la regresión.
+
+
+
+### Comparación de modelos
+
+#### Modelo de regresion agrupada vs con efectos fijos
+
+- **Test de Chow:**
+
+&nbsp; A continuación, realizamos las pruebas con respecto a la elección del modelo. Como primera prueba realizamos el test de Chow, el cual se lleva a cabo a traves del estadistico $F$, para probar el efecto fijo o la significación conjunta de los dummies (Yunitaningtyas & Indahwati, 2019). En otras palabras, la prueba $F$ realiza una comparación del modelo de efectos fijos whitin y el modelo agrupado (pooling model).
+
+$H_0:$ EL modelo pooled es mejor que el de efecto fijo
+
+$H_1:$ El modelo de efectos fijos es mejor que Pooled
+
+```{r}
+# Modelo pooling vs efectos fijos
+pFtest(reg_panel_ef,reg_pool)
+```
+
+
+&nbsp; Tal como podemos observar, con un p-value < 2.2e-16 se rechaza la hipótesis nula y se acepta la hipótesis alternativa, que indica que existe un efecto significativo con respecto alguna de nuestras variables ficticias en el modelo, lo que indica que el modelo de regresion de efectos fijos es mejor que el modelo pooled.
+
+#### Modelo de regresion con efectos fijos vs efectos aleatorios
+
+- **Test de Hausmann:**
+
+&nbsp; Cuando la prueba de Chow muestra que el modelo correspondiente es de efectos fijos, el siguiente paso es realizar las pruebas de Hausmann. La prueba de Hausman es una prueba estadística para seleccionar si es más apropiado el modelo de efectos fijos o de efectos aleatorios. Con respecto a las pruebas de hipótesis, Woldridge (2010), menciona que un rechazo mediante la prueba de Hausman significa que el supuesto clave de efectos aleatorios es falso y por tanto, se usan las estimaciones de efectos fijos.
+
+$H_0:Corr(X_{it},u_{it})=0$ 
+
+$H_1:Corr(X_{it},u_{it})\neq0$
+
+
+```{r}
+# Modelo fijos vs efectos aleatorios
+phtest(reg_panel_ef, reg_panel_ea)
+```
+
+&nbsp; Los resultados nos muestran que con un valor p = 4.144e-05 se rechaza la hipótesis nula de exogeneidad de los efectos fijos y se acepta la hipótesis alterna, que indica que existe correlación entre el error y los regresores, y es preferible elegir el modelo de efectos fijos.
+
+#### Modelo de efectos fijos con efectos individuales y temporales
+- **Efectos fijos individuales y temporales de la variable Falityrate:**
+
+&nbsp; De acuerdo con, Stock & Watson(2012), si algunas variables omitidas son constantes en el tiempo pero varían entre los estados (como por ejemplo, las normas culturales), mientras que otras son constantes entre los estados pero varían en el tiempo (como por ejemplo, los estándares nacionales de seguridad), entonces resulta apropiado incluir efectos tanto individuales (para los estados) como temporales. En otras palabras, tener en cuentas estos efectos nos permiten eliminar el sesgo de variable omitida derivado de variables constantes para todas las entidades individuales correlacionados con los regresores.
+
+&nbsp; En ese sentido, el modelo combinado de regresión de efectos fijos individuales y temporales es:
+
+$$
+Y_{it} =\beta_0 + \beta_{1}X_{it} + \gamma_{2}D2_{i} +...+ \gamma_{n}Dn_{i} + \delta_{2}B2_{t} +...+ \delta_{t}BT_{t} + u_{it}
+$$
+
+&nbsp; Ahora bien, ya que sabemos que nuestro modelo de efectos fijos es significativo, podemos ver como cambíam los resultados cuando se agregan efectos fijos temporales más los efectos fijos individuales de cada estado a nuestra regresión de efectos fijos.
+
+
+```{r message=FALSE, warning=FALSE}
+reg_panel_eft <- plm(fatalityrate ~ sb_useage + speed65 +
+                  speed70 + ba08 + drinkage21 + l_income + age + factor(year),
+                  model="within",
+                  data=S6_cinturon_pl)
+sum3 <- summary(reg_panel_eft, vcov = vcovHC(reg_panel_eft, type="HC1"))
+sum3
+```
+
+&nbsp; Como vemos, cuando incluimos en la regresión los efectos temporales. Es decir, variables no observables, pero constantes para las entidades individuales que evolucionan en el tiempo, vemos que el efecto sigue del uso de cinturón de seguridad sigue siendo negativo con respecto a nuestra variable de fatalidad por millón de millas conducidas. Sin embargo, el efecto es algo menor y significativo solo al 5%.
+
+- **Test de Wald:**
+
+&nbsp; El contraste conjunto de Wald es una prueba estadística que se utiliza para evaluar la significancia conjunta de un conjunto de parámetros en un modelo de regresión. En el caso específico de los modelos de datos panel, el contraste conjunto de Wald se puede utilizar para evaluar la significancia conjunta de las variables ficticias temporales, las cuales se utilizan para controlar el efecto del tiempo en el modelo. Esto es importante porque las variables ficticias temporales añadidas a nuestro modelo se utilizan para controlar el efecto del tiempo en el modelo, y si no tienen un efecto conjunto significativo en el modelo, entonces es posible que el modelo con efectos fijos individuales y temporales no sea el correcto.
+
+$H_0:$ Sin efectos temporales 
+
+$H_1:$ Con efectos temporales
+
+```{r}
+waldtest(reg_panel_eft, formula ="factor(year)")
+```
+
+&nbsp; Como podemos observar, los efectos temporales son estadísticamente significativos. Por lo Tanto, la inclusión de efectos temporales a nuestro modelo de efectos fijos parece la más fiable.
+
+- **Efectos fijos individuales y temporales de la variable sb_usage:**
+
+&nbsp; Ahora con respecto a los efectos de las leyes obligatorios de uso de cinturon de seguridad tomamos que existen dos maneras de aplicar las leyes de obligatoriedad del uso del cinturón de seguridad: la primaria, mediante la cual la aplicación significa que un oficial de policía puede detener un coche y multar al conductor si el oficial observa que un ocupante no lleva puesto el cinturón de seguridad, y la secundaria, mediante la cual la aplicación significa que un oficial de policía puede poner una multa si un ocupante no lleva puesto el cinturón de seguridad, pero debe de existir otra razón para poder detener el coche. Esto está recogido en las variables dummy primary y secondary. 
+
+
+$$
+\begin{aligned}
+sb\_usage_{it} = \gamma_{1}primary_{it} + \gamma_{2}secondary_{it} +\gamma_{1}speed65_{it} + \gamma_{2}speed70_{it}\\ + \gamma_{3}ba08_{it} + \gamma_{4}drinkage_{it} + \beta_{3}l\_income{it}+\beta_{3}age_{it} + \alpha_{it} + factor(year)
+\end{aligned}
+$$ 
+&nbsp; A continuación, realizamos una regresión de la variable sb_usage sobre las variables primary, secondary, speed65, speed70, ba08, drinkage21, log(income) y age, incluyendo efectos fijos individuales de estado y temporales en la regresión.
+
+&nbsp; El resultado de la estimación es: 
+
+```{r message=FALSE, warning=FALSE}
+reg_panel_eft_2 <- plm(sb_useage ~  + primary + secondary + speed65 +
+                       speed70 + ba08 + drinkage21 + l_income + 
+                       age + factor(year),
+                     model="within",
+                     data=S6_cinturon_pl)
+sum4 <- summary(reg_panel_eft_2, vcov = vcovHC(reg_panel_eft_2, type="HC1"))
+sum4
+```
+&nbsp; Como podemos observar, los efectos de las leyes obligarias de uso de cinturon de seguridad (primary y secondary) son positivos y significativos al 1%; sin embargo, el efecto de la aplicación primaria es aproximadamente el doble que de la aplicación secundaria. Lo cual nos indica que, hay un efecto mayor de la aplicación primaria con respecto al uso de cinturón de seguridad, en la que un oficial de policía podía detener un coche y multar al conductor si el oficial observaba que un ocupante no llevaba puesto el cinturón de seguridad.
+
+
+## Interpretación de la regresión
+- **Efectos en la tasa de fatalidad**
+
+&nbsp; En este apartado realizaremos la interpretación de la regresión de panel con efectos fijos y temporales que incluye a la variable dependiente “fatalityrate”, que es el número de muertes por millón de millas conducidas y Los coeficientes de las variables explicativas que influyen en la tasa de mortalidad.
+
+```{r results='asis'}
+# Tabla 6
+knitr::kable(
+  sum3$coefficients, 
+  digits = 5, 
+  align = "c"
+)
+```
+
+&nbsp; En primer lugar, podemos observar que el coeficiente de la variable "sb_useage" sugieren que un mayor uso del cinturón de seguridad está relacionado con una disminución en la tasa de mortalidad. Es decir, un aumento del 1% en la proporción de uso del cinturón de seguridad se asocia con una disminución de 0.0037 en la tasa de mortalidad.
+
+&nbsp; Asimismo, el coeficiente de las variable "speed65" sugieren que no es significativamente estadísticos en la tasa de mortalidad. En cambio, el coeficiente de las variable "speed70", indica que si en el estado hay un límite de velocidad de 70 millas por hora o superior reduce en 0.0008 el ratio de fatalidad. Por otro lado, el coeficiente de la variable "ba08" indica que un límite de alcohol en sangre menor o igual al 0,08% se asocia con una disminución de la tasa de mortalidad, aunque la significancia estadística no es muy alta. Por su parte, el coeficiente de la variable "drinkage21" sugiere que una prohibición de beber alcohol a menores de 21 tiene una relación negativa con la tasa de mortalidad, que corresponde a un disminucion de 0.0011 en las muertes millón de millas conducidas.
+
+&nbsp; Tambien se observa que, el coeficiente de la variable "l_income" no es significativo, lo que sugiere que el nivel de ingresos per cápita no tiene una relación significativa con la tasa de mortalidad. No así, los coeficientes de las variables "age" y los efectos temporales sugieren que hay ciertos años en los que la tasa de mortalidad es significativamente más alta que en otros años.
+
+- **Efectos en el uso del cinturon de seguridad**
+
+&nbsp; Seguidamente, realizamos la interpretación de la regresión de panel con efectos fijos y temporales que incluye a la variable dependiente "fatalityrate", que es la proporción de uso del cinturón de seguridad sobre las variables de aplicación primaria y secondaria, incluyendo a las demás variables.
+
+```{r results='asis'}
+# Tabla 7
+knitr::kable(
+  sum4$coefficients, 
+  digits = 5, 
+  align = "c"
+)
+```
+&nbsp; Los resultados indican que la ley de obligatoriedad de uso del cinturón de seguridad de forma básica (primary) y secundaria (secondary), están significativamente asociadas con un mayor uso del cinturón de seguridad (sb_usage). Donde la aplicación primaria es la más determinante, de acuerdo con nuestro modelo. También podemos observar que la ley de límite de alcohol en sangre menor o igual al 0,08% (ba08) no está significativamente relacionada con el uso del cinturón de seguridad, mientras que la prohibición de beber alcohol a menores de 21 años (drinkage21) tampoco tiene una relación significativa en nuestro modelo.
+
+&nbsp; Respecto a los límites de velocidad, el límite de velocidad de 65 millas por hora (speed65) no tiene un efecto significativo en el uso del cinturón de seguridad, mientras que el límite de velocidad de 70 millas por hora o superior (speed70) tampoco está significativamente relacionado con el uso del cinturón de seguridad.
+
+&nbsp; Por último, en cuanto a los efectos temporales, los coeficientes indican que el uso del cinturón de seguridad ha aumentado significativamente a lo largo de los años de estudio, pero solo en los años 1986, 1991 y 1992.
+
+## Evaluación del modelo
+### Prueba de Normalidad
+&nbsp; Para realizar la evaluación de nuestro modelo realizaremos las distintas pruebas validación, pero hay que tener en cuenta que los modelos de panel pueden ser más complicados que los modelos estándar de regresión. 
+
+&nbsp; Como primer punto realizamos la prueba de bondad de ajuste llamada prueba Kolmogorov-Smirnov, la cual se utiliza para evaluar si los residuos de un modelo se ajustan a una distribución normal. En este caso, la prueba sugiere que los residuos del modelo no se ajustan a una distribución normal.
+
+```{r}
+residuos2 <- as.vector(resid(reg_panel_eft, vcov = vcovHC(reg_panel_eft, type="HC1")))
+ks.test(residuos2, "pnorm")
+hist(residuos2, col = "skyblue", border = "white", main = "Histograma de residuos")
+```
+
+&nbsp; Estos problemas son usuales en los modelos de datos panel ya que, los efectos fijos son variables dummy que representan las diferencias entre las unidades (estados) que se mantienen constantes a lo largo del tiempo. Estas variables son específicas de cada unidad y no varían con el tiempo, lo que las hace diferentes de las variables independientes que se utilizan para explicar la variación en la variable dependiente. Asimismo, al incluir efectos fijos al modelo para controlar las características inobservables de las unidades que no cambian con el tiempo, tiene un impacto en la variable dependiente; ya que las variables independientes se correlacionan con los efectos fijos, lo que viola la suposición de normalidad de los residuos. 
+
+### Pruebas de heterocedasticidad
+&nbsp; Seguidamente, realizaremos la prueba de heterocedasticidad de Breusch-Pagan, la cual  es una prueba estadística utilizada para detectar si los errores de un modelo de datos panel con efectos fijos presentan heterocedasticidad, es decir, si la varianza de los errores no es constante en todas las observaciones.
+
+&nbsp; En general, para esta prueba se recomienda estandarizar los residuos antes de realizar la prueba de heterocedasticidad de Breusch-Pagan utilizando la opción "studentize = T" (que es la opción predeterminada en la función "bptest").
+
+```{r}
+# Pruebas de Heterocedasticidad
+#Pruebas de Heterocedasticidad
+bptest(reg_panel_eft, studentize = T)
+
+```
+
+&nbsp; Ahora bien, dado que el valor de p es mayor que el nivel de significancia típico de 0.05, no se rechaza la hipótesis nula de que no hay heterocedasticidad en los residuos del modelo de regresión. En otras palabras, no hay suficiente evidencia estadística para afirmar que hay heterocedasticidad en los residuos del modelo. Por lo tanto, se puede asumir que la varianza de los errores es constante en todo el rango de valores de la variable independiente.
+
+
+# Conclusiones
+
+&nbsp; Basado en la literatura y la evidencia empírica disponible, se ha demostrado que existe una relación inversa entre el uso de cinturón de seguridad y la tasa de accidentes automovilísticos. Los estudios indican que el uso del cinturón de seguridad reduce significativamente la probabilidad de sufrir lesiones graves o fatales en caso de accidente. Por lo tanto, se puede concluir que el uso del cinturón de seguridad es una medida efectiva para prevenir lesiones y salvar vidas en caso de accidentes automovilísticos. Es importante que los conductores y pasajeros adopten esta práctica como un hábito regular, ya que esto puede tener un impacto significativo en la seguridad en las carreteras.
+
+&nbsp; En general, estos resultados sugieren que la promoción del uso del cinturón de seguridad puede ser una medida efectiva para reducir la tasa de mortalidad en accidentes de tránsito,  mientras que los límites de velocidad más altos pueden tener un efecto opuesto. Asimismo, la obligatoriedad de uso del cinturón de seguridad de forma básica y secundaria está significativamente asociada con un mayor uso del cinturón de seguridad.  Por último, es importante tener en cuenta que los resultados pueden variar dependiendo del contexto y otras variables no incluidas en el modelo.
+
+
+# Referencias
+
+Eynav, H. & Cohen, J. (2003). The Effects of Mandatory Seat Belt Laws on Driving Behavior and Traffic Fatalities.  The Review of Economics and Statistics, 2003, Vol. 85, pp 828-843.
+
+Hanck, C., Arnold, M., & Schmelzer, M. (2021). Introduction to Econometrics with R.
+
+Hiestand, T. (2005). Using Pooled Model, Random Model And Fixed Model Multiple Regression To Measure Foreign Direct Investment In Taiwan.Clute Institute.
+
+Organización Mundial de la Salud. (2014). Road Traffic Accident Statistics. Geneva: WHO.
+
+Montero, R. (2011). Efectos fijos o aleatorios: test de
+especificación. Universidad de Granada. España.
+
+Stock, J. H., & Watson, M. W. (2012). Introducción a la Econometría (3.ª ed.). Pearson Educación.
+
+Wooldridge, J. (2010). Introducción a la 
+econometría. Un enfoque moderno, 4a. edición.
+
+Yunitaningtyas, K & Indahwati, Y. (2019). A panel data analysis of tourism and economic development in Southeast Asian countries. Department of Statistics, IPB University.
+
+
+
+

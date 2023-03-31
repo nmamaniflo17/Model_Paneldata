@@ -1,0 +1,4 @@
+"0","S6_cinturon <- read.csv(""C:\Users\Nelson\Documentos\Projects\Modelo_Panel\base\S6_cinturon.csv"", sep="";"")
+"
+"2","Error: '\U' used without hex digits in character string starting """"C:\U""
+"
