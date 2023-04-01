@@ -1,0 +1,3 @@
+El trabajo "Efectos de las Leyes Obligatorias del Uso del Cinturón de Seguridad en el Comportamiento de Conducción y las Muertes por Accidentes de Tránsito", es una aplicación teórico-práctica del campo de microeconometría.
+La redacción de este trabajo combina la conocimientos teóricos con respecto al manejo de datos panel y la especificación de un modelo. Asimismo, se incluye el paso a paso, para obtener los resultados a travez de software R.
+Por último, el lector puede replicar este trabajo de manera facil y sencilla, ya que los datos y las instrucciones estan incluidas en el repositorio. 
